@@ -1,0 +1,22 @@
+<html>
+    <head>
+        <script type="text/javascript" src="./amplify.min.js"></script>
+        <script type="text/javascript" src="./sjcl.js"></script>
+        <script type="text/javascript" src="./../searchable.js"></script>
+        <script type="text/javascript">
+            keystore = {};
+            corpus = 'I like cake so much!!!';
+            tokens = sjcl.searchable.tokenize('I like cake so much!!!');
+            
+            out = sjcl.searchable.secureIndex(keystore, corpus.length, tokens);
+            
+            query = sjcl.searchable.tokenize('chocolate cake');
+            query = sjcl.searchable.createQuery(keystore, query[0], query[1]);
+            
+            alert(JSON.stringify(out));
+            alert(JSON.stringify(query));
+        </script>
+    </head>
+    <body>
+    </body>
+</html>
