@@ -10,6 +10,23 @@ sjcl.searchable.tokenize = (data) ->
     
     data
 
+generateSecureToken = (iv, key, n, word) ->
+    n = n.toString 16
+    nEnc = '00000000'
+    nEnc = nEnc.substring(0, nEnc.length - n.length) + n
+
+    word = sjcl.codec.hex.fromBits sjcl.codec.utf8String.toBits word
+    wEnc = '00000000000000000000000000000000000000000000000000000000'
+    wEnc = wEnc.substr(0, wEnc.length - word.length) + word
+
+    buff = sjcl.hash.sha256.hash sjcl.codec.hex.toBits(wEnc + nEnc)
+
+    prp = new sjcl.cipher.aes key
+    ct = sjcl.mode.ccm.encrypt prp, buff, iv, [], 0
+    ct = sjcl.codec.base64.fromBits ct
+    
+    ct
+
 # Secures a search index.
 sjcl.searchable.secureIndex = (keystore, max, indexes...) ->
     domain = sjcl.codec.base64.fromBits sjcl.random.randomWords 4, 0
@@ -39,22 +56,7 @@ sjcl.searchable.secureIndex = (keystore, max, indexes...) ->
         word = word.substr 0, 28
         offset = 28 - word.length
         
-        for n, id of ids
-            n = n.toString 16
-            nEnc = '00000000'
-            nEnc = nEnc.substring(0, nEnc.length - n.length) + n
-            
-            word = sjcl.codec.hex.fromBits sjcl.codec.utf8String.toBits word
-            wEnc = '00000000000000000000000000000000000000000000000000000000'
-            wEnc = wEnc.substr(0, wEnc.length - word.length) + word
-            
-            buff = sjcl.hash.sha256.hash sjcl.codec.hex.toBits(wEnc + nEnc)
-            
-            prp = new sjcl.cipher.aes key
-            ct = sjcl.mode.ccm.encrypt prp, buff, iv, [], 0
-            ct = sjcl.codec.base64.fromBits ct
-            
-            sindex[ct] = id
+        sindex[generateSecureToken(iv, key, n, word)] = id for n, id of ids
     
     docs = [] # Get an array of unique document ids.
     docs.push id for id in ids when -1 is docs.indexOf id for word, ids of index
@@ -78,19 +80,8 @@ sjcl.searchable.secureIndex = (keystore, max, indexes...) ->
         
         l = sum - c
         while l -= 1
-            n = (docs.length + l).toString 16
-            nEnc = '00000000'
-            nEnc = nEnc.substring(0, nEnc.length - n.length) + n
-            
-            buff = '00000000000000000000000000000000000000000000000000000000'
-            buff = sjcl.hash.sha256.hash sjcl.codec.hex.toBits(buff + nEnc)
-            
-            prp = new sjcl.cipher.aes key
-            ct = sjcl.mode.ccm.encrypt prp, buff, iv, [], 0
-            ct = sjcl.codec.base64.fromBits ct
-            
-            sindex[ct] = id
-
+            sindex[generateSecureToken(iv, key, docs.length + l, '')] = id
+    
     shuffle = (array) ->
         i = array.length
         if i is 0 then return false
@@ -98,7 +89,7 @@ sjcl.searchable.secureIndex = (keystore, max, indexes...) ->
         bytes = Math.ceil(Math.log(array.length) / (8 * Math.log(2)))
         while i -= 1
             N = new sjcl.bn array.length
-            j = new sjcl.bn 4294967296
+            j = new sjcl.bn 4294967297
             one = new sjcl.bn 1
             cap = 4294967296 - (4294967296 % array.length) + 1
             cap = new sjcl.bn cap
@@ -120,6 +111,7 @@ sjcl.searchable.secureIndex = (keystore, max, indexes...) ->
     
     out =
         newId: newId
+        newDomain: domain
         index:
             docs: docs
             index: rsindex
@@ -134,6 +126,7 @@ sjcl.searchable.createQuery = (keystore, tokens...) ->
         offset = 28 - word.length
         
         out = {}
+        
         for dn, blob of keystore
             data = sjcl.codec.base64.toBits blob[1]
             iv = data.slice 0, 4
@@ -141,21 +134,7 @@ sjcl.searchable.createQuery = (keystore, tokens...) ->
             
             [i, out[dn]] = [0, []]
             until i is blob[0]
-                n = i.toString 16
-                nEnc = '00000000'
-                nEnc = nEnc.substring(0, nEnc.length - n.length) + n
-                
-                word = sjcl.codec.hex.fromBits sjcl.codec.utf8String.toBits word
-                wEn = '00000000000000000000000000000000000000000000000000000000'
-                wEn = wEn.substr(0, wEn.length - word.length) + word
-                
-                buff = sjcl.hash.sha256.hash sjcl.codec.hex.toBits(wEn + nEnc)
-                
-                prp = new sjcl.cipher.aes key
-                ct = sjcl.mode.ccm.encrypt prp, buff, iv, [], 0
-                ct = sjcl.codec.base64.fromBits ct
-                
-                out[dn].push ct
+                out[dn].push generateSecureToken iv, key, i, word
                 ++i
         
         queries.push out

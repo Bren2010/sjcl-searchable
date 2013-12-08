@@ -1,0 +1,50 @@
+<html>
+    <head>
+        <script type="text/javascript" src="./example/coffee-script.js"></script>
+        <script type="text/javascript" src="./example/amplify.min.js"></script>
+        <script type="text/javascript" src="./example/sjcl.js"></script>
+        <script type="text/coffeescript" src="./searchable.coffee"></script>
+        <script type="text/coffeescript">
+            pass = amplify.store 'pass' # There should always be a pass.
+            
+            # Decrypt the keystore.
+            keystore = unescape '{{{keystore}}}'
+            if keystore is '' then keystore = {}
+            else keystore = JSON.parse sjcl.decrypt pass, keystore
+            
+            replaces = JSON.parse unescape '{{{replaces}}}'
+            corpus = JSON.parse unescape '{{{corpus}}}'
+            
+            [max, indexes] = [0, []]
+            
+            # Decrypt all entries in the corpus and create an index.
+            corpus[id] = sjcl.decrypt pass, entry for id, entry of corpus
+            max = entry.length for id, entry of corpus when entry.length > max
+            for id, entry of corpus
+                tokens = sjcl.searchable.tokenize entry
+                index = {}
+                index[token] = id for token in tokens
+                indexes.push index
+            
+            out = sjcl.searchable.secureIndex keystore, max, indexes...
+            
+            # Submit form.
+            form = document.getElementById 'submit'
+            form.domain.value = out.newDomain
+            form.replaces.value = JSON.stringify replaces
+            form.keystore.value = sjcl.encrypt pass, JSON.stringify keystore
+            form.index.value = JSON.stringify out.index
+            
+            form.submit()
+        </script>
+    </head>
+    <body>
+        <center><i>Please wait...</i></center>
+        <form method="post" action="/post" id="submit">
+            <input type="hidden" name="domain" />
+            <input type="hidden" name="replaces" />
+            <input type="hidden" name="keystore" />
+            <input type="hidden" name="index" />
+        </form>
+    </body>
+</html>
